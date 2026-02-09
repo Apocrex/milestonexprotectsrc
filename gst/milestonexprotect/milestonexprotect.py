@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime, timedelta
 import gi
 import re
@@ -66,7 +67,7 @@ def element_message(element, domain, code, message, debug=None, message_type="er
 """
   Gets an OAuth token for the given hostname, domain, username and password
 """
-def get_oauth_token(hostname: str, domain: str, username: str, password: str) -> str | None:
+def get_oauth_token(hostname: str, domain: str, username: str, password: str) -> Optional[str]:
   session = Session()
   session.mount("https://", SSLAdapter())
   session.verify = False # Highly unlikely we'll trust the Milestone cert, so just ignore errors
@@ -400,9 +401,20 @@ This can help when servers return a different hostname (i.e DNS instead of an IP
         return False
       self.instance_id = str(uuid.uuid4())
 
-      if self.force_management_address and "address" in self.client.service._binding_options:
-        # Replace the hostname in the WSDL with the one we're using
-        parsed = urlparse(self.client.service._binding_options["address"])
+      # Always replace hostnames in service endpoints with management_server to avoid DNS issues
+      from urllib.parse import urlparse
+      for service in self.client.wsdl.services.values():
+        for port in service.ports.values():
+          if "address" in port.binding_options:
+            address = port.binding_options["address"]
+            address = address.replace("http:", "https:")  # Force HTTPS
+            parsed = urlparse(address)
+            if parsed.hostname and parsed.hostname != self.management_server:
+              Gst.info(f"Replacing service hostname {parsed.hostname} with {self.management_server}")
+              new_netloc = f"{self.management_server}:{parsed.port}" if parsed.port else self.management_server
+              address = parsed._replace(netloc=new_netloc).geturl()
+            port.binding_options["address"] = address
+
         self.client.service._binding_options["address"] = parsed._replace(netloc=self.management_server).geturl()
 
       self.service = self.client.service
