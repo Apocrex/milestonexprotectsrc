@@ -570,8 +570,12 @@ This can help when servers return a different hostname (i.e DNS instead of an IP
 
             if self.write_camera_timestamp and 'current' in headers:
               try:
-                timestamp_ms = int(headers['current'])
-                timestamp_ns = timestamp_ms * 1000000
+                unix_timestamp_ms = int(headers['current'])
+
+                # 'current' header contains Unix timestamp in milliseconds. We need to convert to NTP epoch.
+                # NTP epoch is 1900-01-01, Unix epoch is 1970-01-01 (70 years = 2208988800 seconds)
+                ntp_offset_seconds = 2208988800
+                timestamp_ns = (unix_timestamp_ms * 1000000) + (ntp_offset_seconds * 1000000000)
 
                 if self.ntp_caps is None:
                   self.ntp_caps = Gst.Caps.from_string("timestamp/x-ntp")
